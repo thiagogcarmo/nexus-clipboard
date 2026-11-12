@@ -4,11 +4,10 @@ import os
 import ctypes
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QTabWidget, QWidget, 
                              QVBoxLayout, QListWidget, QPushButton, QHBoxLayout, 
-                             QLineEdit, QLabel, QListWidgetItem)
+                             QLineEdit, QLabel, QListWidgetItem, QAbstractItemView)
 from PyQt6.QtGui import QIcon
 from PyQt6.QtCore import Qt
 
-# --- FORÇA O WINDOWS A RECONHECER O APP SEPARADO DO PYTHON ---
 try:
     myappid = 'nexus.clipboard.manager.v3'
     ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
@@ -69,20 +68,18 @@ class DatabaseManager:
 class CyberClipboard(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("NEXUS // CLIPBOARD_MANAGER_v3.0")
-        self.resize(600, 700)
+        self.setWindowTitle("NEXUS // CLIPBOARD_MANAGER_v3.1")
+        self.resize(650, 700)
         
-        # --- CARREGAMENTO DO ÍCONE ---
         script_dir = os.path.dirname(os.path.abspath(__file__))
         icon_path = os.path.join(script_dir, "icone.png") 
         
         if os.path.exists(icon_path):
             self.setWindowIcon(QIcon(icon_path))
-        else:
-            print(f"Aviso: Ícone não encontrado em {icon_path}")
 
         self.db = DatabaseManager()
 
+        # Estilo atualizado com a Barra de Rolagem (ScrollBar) Cyberpunk
         self.setStyleSheet("""
             QMainWindow { background-color: #09090b; }
             QTabWidget::pane { border: 1px solid #ff007f; background-color: #09090b; top: -1px; }
@@ -91,9 +88,22 @@ class CyberClipboard(QMainWindow):
                 padding: 8px 15px; font-family: 'Consolas'; font-weight: bold;
             }
             QTabBar::tab:selected { background: #ff007f; color: #ffffff; }
+            
             QListWidget { background-color: #000000; border: none; outline: none; }
             QListWidget::item { border-bottom: 1px solid #222; }
             QListWidget::item:hover { background-color: #151515; }
+            
+            /* BARRA DE ROLAGEM CUSTOMIZADA */
+            QScrollBar:vertical {
+                border: none; background: #09090b; width: 12px; margin: 0px;
+            }
+            QScrollBar::handle:vertical {
+                background: #ff007f; min-height: 30px; border-radius: 6px;
+            }
+            QScrollBar::handle:vertical:hover { background: #00ffcc; }
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0px; }
+            QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: none; }
+
             QLineEdit {
                 background-color: #111; color: #fff; border: 1px solid #00ffcc;
                 padding: 8px; font-family: 'Consolas'; font-size: 13px;
@@ -103,11 +113,14 @@ class CyberClipboard(QMainWindow):
                 padding: 8px 15px; font-family: 'Consolas'; font-weight: bold;
             }
             QPushButton:hover { background-color: #00ffcc; color: #000; }
+            
+            /* BOTÃO DE APAGAR MAIOR E MAIS VISÍVEL */
             QPushButton#deleteBtn {
                 background-color: transparent; color: #ff0044; border: 1px solid #ff0044;
-                padding: 2px; font-size: 12px;
+                padding: 5px 10px; font-size: 12px; font-family: 'Consolas'; font-weight: bold;
             }
             QPushButton#deleteBtn:hover { background-color: #ff0044; color: #fff; }
+            
             QPushButton#btnAba { color: #ff007f; border-color: #ff007f; }
             QPushButton#btnAba:hover { background-color: #ff007f; color: #fff; }
         """)
@@ -152,7 +165,6 @@ class CyberClipboard(QMainWindow):
 
         self.load_data_from_db()
 
-    # --- BANCO DE DADOS E CARREGAMENTO ---
     def load_data_from_db(self):
         saved_tabs = self.db.get_tabs()
         if not saved_tabs:
@@ -165,7 +177,6 @@ class CyberClipboard(QMainWindow):
             for text_id, content in texts: 
                 self.add_item_to_ui(tab_name, text_id, content, insert_at_top=False)
 
-    # --- GERENCIAMENTO DE ABAS ---
     def create_new_tab(self):
         tab_name = self.new_tab_input.text().strip().upper()
         if tab_name:
@@ -185,6 +196,8 @@ class CyberClipboard(QMainWindow):
         layout.setContentsMargins(0, 0, 0, 0)
         
         list_widget = QListWidget()
+        # Scroll suave ativado
+        list_widget.setVerticalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
         list_widget.itemClicked.connect(self.copy_to_clipboard)
         layout.addWidget(list_widget)
         
@@ -196,7 +209,6 @@ class CyberClipboard(QMainWindow):
         self.db.remove_tab(tab_name)
         self.tabs.removeTab(index)
 
-    # --- GERENCIAMENTO DE TEXTOS ---
     def add_text_to_current_tab(self):
         current_tab = self.tabs.currentWidget()
         if current_tab:
@@ -226,13 +238,14 @@ class CyberClipboard(QMainWindow):
                 label.setWordWrap(True)
                 label.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents) 
                 
-                del_btn = QPushButton("X")
+                del_btn = QPushButton("[ APAGAR ]")
                 del_btn.setObjectName("deleteBtn")
-                del_btn.setFixedSize(24, 24)
                 del_btn.setCursor(Qt.CursorShape.PointingHandCursor)
                 del_btn.clicked.connect(lambda checked, lw=list_widget, itm=item: self.delete_item(lw, itm))
                 
-                row_layout.addWidget(label)
+                # O stretch=1 (esticamento) é o segredo aqui: força o texto a ocupar o espaço 
+                # disponível e empurra o botão firmemente para a direita, sem deixá-lo sumir.
+                row_layout.addWidget(label, stretch=1)
                 row_layout.addWidget(del_btn)
                 
                 item.setSizeHint(row_widget.sizeHint())
