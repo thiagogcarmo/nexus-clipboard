@@ -4,7 +4,8 @@ import os
 import ctypes
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QTabWidget, QWidget, 
                              QVBoxLayout, QListWidget, QPushButton, QHBoxLayout, 
-                             QLineEdit, QLabel, QListWidgetItem, QAbstractItemView)
+                             QLineEdit, QLabel, QListWidgetItem, QAbstractItemView,
+                             QDialog, QTextEdit)
 from PyQt6.QtGui import QIcon
 from PyQt6.QtCore import Qt
 
@@ -64,11 +65,56 @@ class DatabaseManager:
     def remove_text(self, text_id):
         self.cursor.execute("DELETE FROM texts WHERE id = ?", (text_id,))
         self.conn.commit()
+        
+    # --- NOVA FUNÇÃO PARA ATUALIZAR O TEXTO ---
+    def update_text(self, text_id, new_content):
+        self.cursor.execute("UPDATE texts SET content = ? WHERE id = ?", (new_content, text_id))
+        self.conn.commit()
+
+# --- NOVA JANELA DE EDIÇÃO ---
+class EditDialog(QDialog):
+    def __init__(self, current_text, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("NEXUS // EDITAR MODELO")
+        self.resize(500, 400)
+        
+        # Herda o estilo da janela principal
+        if parent:
+            self.setStyleSheet(parent.styleSheet())
+            
+        layout = QVBoxLayout(self)
+        
+        # Caixa de texto grande para edição (suporta múltiplas linhas)
+        self.text_edit = QTextEdit()
+        self.text_edit.setPlainText(current_text)
+        self.text_edit.setStyleSheet("""
+            background-color: #111; color: #00ffcc; border: 1px solid #ff007f;
+            padding: 10px; font-family: 'Consolas'; font-size: 14px;
+        """)
+        layout.addWidget(self.text_edit)
+        
+        btn_layout = QHBoxLayout()
+        
+        self.save_btn = QPushButton("[ SALVAR ]")
+        self.save_btn.clicked.connect(self.accept)
+        
+        self.cancel_btn = QPushButton("[ CANCELAR ]")
+        self.cancel_btn.clicked.connect(self.reject)
+        self.cancel_btn.setStyleSheet("color: #ff0044; border-color: #ff0044;")
+        
+        btn_layout.addWidget(self.cancel_btn)
+        btn_layout.addWidget(self.save_btn)
+        
+        layout.addLayout(btn_layout)
+
+    def get_text(self):
+        return self.text_edit.toPlainText()
+
 
 class CyberClipboard(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("NEXUS // CLIPBOARD_MANAGER_v3.1")
+        self.setWindowTitle("NEXUS // CLIPBOARD_MANAGER_v3.2")
         self.resize(650, 700)
         
         script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -79,9 +125,8 @@ class CyberClipboard(QMainWindow):
 
         self.db = DatabaseManager()
 
-        # Estilo atualizado com a Barra de Rolagem (ScrollBar) Cyberpunk
         self.setStyleSheet("""
-            QMainWindow { background-color: #09090b; }
+            QMainWindow, QDialog { background-color: #09090b; }
             QTabWidget::pane { border: 1px solid #ff007f; background-color: #09090b; top: -1px; }
             QTabBar::tab {
                 background: #111; color: #00ffcc; border: 1px solid #ff007f;
@@ -93,7 +138,6 @@ class CyberClipboard(QMainWindow):
             QListWidget::item { border-bottom: 1px solid #222; }
             QListWidget::item:hover { background-color: #151515; }
             
-            /* BARRA DE ROLAGEM CUSTOMIZADA */
             QScrollBar:vertical {
                 border: none; background: #09090b; width: 12px; margin: 0px;
             }
@@ -114,12 +158,18 @@ class CyberClipboard(QMainWindow):
             }
             QPushButton:hover { background-color: #00ffcc; color: #000; }
             
-            /* BOTÃO DE APAGAR MAIOR E MAIS VISÍVEL */
             QPushButton#deleteBtn {
                 background-color: transparent; color: #ff0044; border: 1px solid #ff0044;
                 padding: 5px 10px; font-size: 12px; font-family: 'Consolas'; font-weight: bold;
             }
             QPushButton#deleteBtn:hover { background-color: #ff0044; color: #fff; }
+            
+            /* ESTILO DO BOTÃO DE EDITAR */
+            QPushButton#editBtn {
+                background-color: transparent; color: #ffff00; border: 1px solid #ffff00;
+                padding: 5px 10px; font-size: 12px; font-family: 'Consolas'; font-weight: bold;
+            }
+            QPushButton#editBtn:hover { background-color: #ffff00; color: #000; }
             
             QPushButton#btnAba { color: #ff007f; border-color: #ff007f; }
             QPushButton#btnAba:hover { background-color: #ff007f; color: #fff; }
@@ -130,7 +180,6 @@ class CyberClipboard(QMainWindow):
         self.setCentralWidget(self.central_widget)
         self.layout = QVBoxLayout(self.central_widget)
 
-        # 1. BARRA SUPERIOR
         self.top_layout = QHBoxLayout()
         self.new_tab_input = QLineEdit()
         self.new_tab_input.setPlaceholderText(">> NOME DO NOVO ASSUNTO...")
@@ -144,13 +193,11 @@ class CyberClipboard(QMainWindow):
         self.top_layout.addWidget(self.add_tab_btn)
         self.layout.addLayout(self.top_layout)
 
-        # 2. SISTEMA DE ABAS
         self.tabs = QTabWidget()
         self.tabs.setTabsClosable(True)
         self.tabs.tabCloseRequested.connect(self.delete_tab)
         self.layout.addWidget(self.tabs)
 
-        # 3. BARRA INFERIOR
         self.bottom_layout = QHBoxLayout()
         self.new_text_input = QLineEdit()
         self.new_text_input.setPlaceholderText(">> INSERIR NOVO TEXTO NA ABA ATUAL...")
@@ -196,7 +243,6 @@ class CyberClipboard(QMainWindow):
         layout.setContentsMargins(0, 0, 0, 0)
         
         list_widget = QListWidget()
-        # Scroll suave ativado
         list_widget.setVerticalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
         list_widget.itemClicked.connect(self.copy_to_clipboard)
         layout.addWidget(list_widget)
@@ -238,14 +284,20 @@ class CyberClipboard(QMainWindow):
                 label.setWordWrap(True)
                 label.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents) 
                 
+                # NOVO BOTÃO: EDITAR
+                edit_btn = QPushButton("[ EDITAR ]")
+                edit_btn.setObjectName("editBtn")
+                edit_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+                edit_btn.clicked.connect(lambda checked, lw=list_widget, itm=item, lbl=label: self.edit_item(lw, itm, lbl))
+                
+                # BOTÃO: APAGAR
                 del_btn = QPushButton("[ APAGAR ]")
                 del_btn.setObjectName("deleteBtn")
                 del_btn.setCursor(Qt.CursorShape.PointingHandCursor)
                 del_btn.clicked.connect(lambda checked, lw=list_widget, itm=item: self.delete_item(lw, itm))
                 
-                # O stretch=1 (esticamento) é o segredo aqui: força o texto a ocupar o espaço 
-                # disponível e empurra o botão firmemente para a direita, sem deixá-lo sumir.
                 row_layout.addWidget(label, stretch=1)
+                row_layout.addWidget(edit_btn)
                 row_layout.addWidget(del_btn)
                 
                 item.setSizeHint(row_widget.sizeHint())
@@ -257,6 +309,19 @@ class CyberClipboard(QMainWindow):
                     
                 list_widget.setItemWidget(item, row_widget)
                 break
+
+    # --- FUNÇÃO QUE ABRE O POPUP DE EDIÇÃO E ATUALIZA O BANCO E A TELA ---
+    def edit_item(self, list_widget, item, label):
+        text_id = item.data(Qt.ItemDataRole.UserRole + 1)
+        current_text = item.data(Qt.ItemDataRole.UserRole)
+        
+        dialog = EditDialog(current_text, self)
+        if dialog.exec(): # Se o usuário clicar em [ SALVAR ]
+            new_text = dialog.get_text().strip()
+            if new_text and new_text != current_text:
+                self.db.update_text(text_id, new_text)       # Atualiza no Disco (SQLite)
+                item.setData(Qt.ItemDataRole.UserRole, new_text) # Atualiza a memória oculta para o copy/paste
+                label.setText(new_text)                          # Atualiza o visual da lista
 
     def delete_item(self, list_widget, item):
         text_id = item.data(Qt.ItemDataRole.UserRole + 1)
